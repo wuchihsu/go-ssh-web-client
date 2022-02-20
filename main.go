@@ -1,0 +1,41 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"log"
+
+	"golang.org/x/crypto/ssh"
+)
+
+func main() {
+	config := &ssh.ClientConfig{
+		User: "linuxserver.io",
+		Auth: []ssh.AuthMethod{
+			ssh.Password("cch"),
+		},
+		// InsecureIgnoreHostKey returns a function
+		// that can be used for ClientConfig.HostKeyCallback
+		// to accept any host key.
+		// It should not be used for production code.
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+	client, err := ssh.Dial("tcp", "127.0.0.1:2222", config)
+	if err != nil {
+		log.Fatal("Failed to dial: ", err)
+	}
+	defer client.Close()
+
+	session, err := client.NewSession()
+	if err != nil {
+		log.Fatal("Failed to create session: ", err)
+	}
+	defer session.Close()
+
+	var b bytes.Buffer
+	session.Stdout = &b
+	if err := session.Run("/usr/bin/whoami"); err != nil {
+		log.Fatal("Failed to run: ", err.Error())
+	}
+	fmt.Println(b.String())
+}
