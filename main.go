@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"fmt"
 	"log"
+	"os"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -32,10 +31,21 @@ func main() {
 	}
 	defer session.Close()
 
-	var b bytes.Buffer
-	session.Stdout = &b
-	if err := session.Run("/usr/bin/whoami"); err != nil {
-		log.Fatal("Failed to run: ", err.Error())
+	session.Stdin = os.Stdin
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          0,     // disable echoing
+		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
+		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
-	fmt.Println(b.String())
+	if err := session.RequestPty("xterm", 40, 80, modes); err != nil {
+		log.Fatal("request for pseudo terminal failed: ", err)
+	}
+	if err := session.Shell(); err != nil {
+		log.Fatal("failed to start shell: ", err)
+	}
+
+	select {}
 }
