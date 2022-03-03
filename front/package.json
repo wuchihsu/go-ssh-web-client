@@ -1,0 +1,30 @@
+{
+  "name": "go-ssh-web-client",
+  "version": "0.0.1",
+  "description": "Using Go, WebSocket and xterm.js to be a SSH client.",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wuchihsu/go-ssh-web-client.git"
+  },
+  "keywords": [
+    "go",
+    "ssh"
+  ],
+  "author": "Chia-Chi Hsu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wuchihsu/go-ssh-web-client/issues"
+  },
+  "homepage": "https://github.com/wuchihsu/go-ssh-web-client#readme",
+  "dependencies": {
+    "xterm": "^4.17.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.69.1",
+    "webpack-cli": "^4.9.2"
+  }
+}
