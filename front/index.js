@@ -1,5 +1,10 @@
 import { Terminal } from 'xterm';
+import { AttachAddon } from 'xterm-addon-attach';
 
-const term = new Terminal();
-term.open(document.getElementById('terminal'));
-term.write('Heeeeeeello from \x1B[1;3;31mxterm.js\x1B[0m $ ');
+const terminal = new Terminal();
+terminal.open(document.getElementById('terminal'));
+
+const webSocket = new WebSocket("ws://127.0.0.1:8080/ws");
+
+const attachAddon = new AttachAddon(webSocket);
+terminal.loadAddon(attachAddon);
