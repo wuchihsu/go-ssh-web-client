@@ -52,6 +52,10 @@ func (c *sshClient) PtyAndShell(ptyH, ptyW int) error {
 	return nil
 }
 
+func (c *sshClient) PtyWindowChange(h, w int) error {
+	return c.session.WindowChange(h, w)
+}
+
 func (c *sshClient) SessionStderrPipe() (io.Reader, error) {
 	return c.session.StderrPipe()
 }
