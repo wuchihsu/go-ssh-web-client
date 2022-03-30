@@ -20,13 +20,19 @@ const (
 	// Maximum message size allowed from peer.
 	maxMessageSize = 512
 
-	addr = "127.0.0.1:2222"
-	user = "linuxserver.io"
+	addr     = "127.0.0.1:2222"
+	user     = "linuxserver.io"
 	password = "cch"
 )
 
+var terminalModes = ssh.TerminalModes{
+	ssh.ECHO:          1,     // enable echoing (different from the example in docs)
+	ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
+	ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
+}
+
 type windowSize struct {
-	High int `json:"high"`
+	High  int `json:"high"`
 	Width int `json:"width"`
 }
 
@@ -40,9 +46,18 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     checkOrigin,
 }
 
-func getWindowSize(conn *websocket.Conn) (wdSize *windowSize, err error) {
-	conn.SetReadDeadline(time.Now().Add(messageWait))
-	msgType, msg, err := conn.ReadMessage()
+type sshClient struct {
+	conn     *websocket.Conn
+	client   *ssh.Client
+	sess     *ssh.Session
+	sessIn   io.WriteCloser
+	sessOut  io.Reader
+	closeSig chan struct{}
+}
+
+func (c *sshClient) getWindowSize() (wdSize *windowSize, err error) {
+	c.conn.SetReadDeadline(time.Now().Add(messageWait))
+	msgType, msg, err := c.conn.ReadMessage()
 	if msgType != websocket.BinaryMessage {
 		err = fmt.Errorf("conn.ReadMessage: message type is not binary")
 		return
@@ -62,15 +77,19 @@ func getWindowSize(conn *websocket.Conn) (wdSize *windowSize, err error) {
 	return
 }
 
-func wsWrite(conn *websocket.Conn, sess *ssh.Session, sessOut io.Reader) error {
+func (c *sshClient) wsWrite() error {
+	defer func() {
+		c.closeSig <- struct{}{}
+	}()
+
 	data := make([]byte, maxMessageSize, maxMessageSize)
 
 	for {
 		time.Sleep(10 * time.Millisecond)
-		n, readErr := sessOut.Read(data)
+		n, readErr := c.sessOut.Read(data)
 		if n > 0 {
-			conn.SetWriteDeadline(time.Now().Add(messageWait))
-			if err := conn.WriteMessage(websocket.TextMessage, data[:n]); err != nil {
+			c.conn.SetWriteDeadline(time.Now().Add(messageWait))
+			if err := c.conn.WriteMessage(websocket.TextMessage, data[:n]); err != nil {
 				return fmt.Errorf("conn.WriteMessage: %w", err)
 			}
 		}
@@ -80,17 +99,21 @@ func wsWrite(conn *websocket.Conn, sess *ssh.Session, sessOut io.Reader) error {
 	}
 }
 
-func wsRead(conn *websocket.Conn, sess *ssh.Session, sessIn io.WriteCloser) error {
+func (c *sshClient) wsRead() error {
+	defer func() {
+		c.closeSig <- struct{}{}
+	}()
+
 	var zeroTime time.Time
-	conn.SetReadDeadline(zeroTime)
+	c.conn.SetReadDeadline(zeroTime)
 
 	for {
-		msgType, connReader, err := conn.NextReader()
+		msgType, connReader, err := c.conn.NextReader()
 		if err != nil {
 			return fmt.Errorf("conn.NextReader: %w", err)
 		}
 		if msgType != websocket.BinaryMessage {
-			if _, err := io.Copy(sessIn, connReader); err != nil {
+			if _, err := io.Copy(c.sessIn, connReader); err != nil {
 				return fmt.Errorf("io.Copy: %w", err)
 			}
 			continue
@@ -111,16 +134,16 @@ func wsRead(conn *websocket.Conn, sess *ssh.Session, sessIn io.WriteCloser) erro
 
 		// log.Println("wdSize:", wdSize)
 
-		if err := sess.WindowChange(wdSize.High, wdSize.Width); err != nil {
+		if err := c.sess.WindowChange(wdSize.High, wdSize.Width); err != nil {
 			return fmt.Errorf("sess.WindowChange: %w", err)
 		}
 	}
 }
 
-func bridgeWSAndSSH(conn *websocket.Conn) {
-	defer conn.Close()
+func (c *sshClient) bridgeWSAndSSH() {
+	defer c.conn.Close()
 
-	wdSize, err := getWindowSize(conn)
+	wdSize, err := c.getWindowSize()
 	if err != nil {
 		log.Println("bridgeWSAndSSH: getWindowSize:", err)
 		return
@@ -140,53 +163,59 @@ func bridgeWSAndSSH(conn *websocket.Conn) {
 		// It should not be used for production code.
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	client, err := ssh.Dial("tcp", addr, config)
+	c.client, err = ssh.Dial("tcp", addr, config)
 	if err != nil {
 		log.Println("bridgeWSAndSSH: ssh.Dial:", err)
 		return
 	}
-	defer client.Close()
+	defer c.client.Close()
 
-	session, err := client.NewSession()
+	c.sess, err = c.client.NewSession()
 	if err != nil {
 		log.Println("bridgeWSAndSSH: client.NewSession:", err)
 		return
 	}
-	defer session.Close()
+	defer c.sess.Close()
 
-	session.Stderr = os.Stderr  // TODO: check proper Stderr output
-	sessOut, err := session.StdoutPipe()
+	c.sess.Stderr = os.Stderr // TODO: check proper Stderr output
+	c.sessOut, err = c.sess.StdoutPipe()
 	if err != nil {
 		log.Println("bridgeWSAndSSH: session.StdoutPipe:", err)
 		return
 	}
 
-	sessIn, err := session.StdinPipe()
+	c.sessIn, err = c.sess.StdinPipe()
 	if err != nil {
 		log.Println("bridgeWSAndSSH: session.StdinPipe:", err)
 		return
 	}
+	defer c.sessIn.Close()
 
-	if err := session.RequestPty("xterm", wdSize.High, wdSize.Width, terminalModes); err != nil {
+	if err := c.sess.RequestPty("xterm", wdSize.High, wdSize.Width, terminalModes); err != nil {
 		log.Println("bridgeWSAndSSH: session.RequestPty:", err)
 		return
 	}
-	if err := session.Shell(); err != nil {
+	if err := c.sess.Shell(); err != nil {
 		log.Println("bridgeWSAndSSH: session.Shell:", err)
 		return
 	}
 
 	log.Println("started a login shell on the remote host")
+	defer log.Println("closed a login shell on the remote host")
 
 	go func() {
-		if err := wsRead(conn, session, sessIn); err != nil {
+		if err := c.wsRead(); err != nil {
 			log.Println("bridgeWSAndSSH: wsRead:", err)
 		}
 	}()
 
-	if err := wsWrite(conn, session, sessOut); err != nil {
-		log.Println("bridgeWSAndSSH: wsWrite:", err)
-	}
+	go func() {
+		if err := c.wsWrite(); err != nil {
+			log.Println("bridgeWSAndSSH: wsWrite:", err)
+		}
+	}()
+
+	<-c.closeSig
 }
 
 // handleSSHWebSocket handles websocket requests for SSH from the clients.
@@ -197,5 +226,6 @@ func handleSSHWebSocket(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	go bridgeWSAndSSH(conn)
+	sshCli := &sshClient{conn: conn, closeSig: make(chan struct{}, 1)}
+	go sshCli.bridgeWSAndSSH()
 }
