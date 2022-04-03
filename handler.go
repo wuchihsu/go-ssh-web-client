@@ -19,10 +19,6 @@ const (
 
 	// Maximum message size allowed from peer.
 	maxMessageSize = 512
-
-	addr     = "127.0.0.1:2222"
-	user     = "linuxserver.io"
-	password = "cch"
 )
 
 var terminalModes = ssh.TerminalModes{
@@ -36,6 +32,7 @@ type windowSize struct {
 	Width int `json:"width"`
 }
 
+// TODO: do not bypass origin check
 func checkOrigin(r *http.Request) bool {
 	return true
 }
@@ -48,6 +45,9 @@ var upgrader = websocket.Upgrader{
 
 type sshClient struct {
 	conn     *websocket.Conn
+	addr     string
+	user     string
+	secret   string
 	client   *ssh.Client
 	sess     *ssh.Session
 	sessIn   io.WriteCloser
@@ -151,11 +151,10 @@ func (c *sshClient) bridgeWSAndSSH() {
 
 	// log.Println("wdSize:", wdSize)
 
-	// TODO: get addr, user and password from args or a config file
 	config := &ssh.ClientConfig{
-		User: user,
+		User: c.user,
 		Auth: []ssh.AuthMethod{
-			ssh.Password(password),
+			ssh.Password(c.secret),
 		},
 		// InsecureIgnoreHostKey returns a function
 		// that can be used for ClientConfig.HostKeyCallback
@@ -163,7 +162,7 @@ func (c *sshClient) bridgeWSAndSSH() {
 		// It should not be used for production code.
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	c.client, err = ssh.Dial("tcp", addr, config)
+	c.client, err = ssh.Dial("tcp", c.addr, config)
 	if err != nil {
 		log.Println("bridgeWSAndSSH: ssh.Dial:", err)
 		return
@@ -218,14 +217,26 @@ func (c *sshClient) bridgeWSAndSSH() {
 	<-c.closeSig
 }
 
-// handleSSHWebSocket handles websocket requests for SSH from the clients.
-func handleSSHWebSocket(w http.ResponseWriter, req *http.Request) {
+type sshHandler struct {
+	addr   string
+	user   string
+	secret string
+}
+
+// webSocket handles WebSocket requests for SSH from the clients.
+func (h *sshHandler) webSocket(w http.ResponseWriter, req *http.Request) {
 	conn, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
 		log.Println("upgrader.Upgrade:", err)
 		return
 	}
 
-	sshCli := &sshClient{conn: conn, closeSig: make(chan struct{}, 1)}
+	sshCli := &sshClient{
+		conn:     conn,
+		addr:     h.addr,
+		user:     h.user,
+		secret:   h.secret,
+		closeSig: make(chan struct{}, 1),
+	}
 	go sshCli.bridgeWSAndSSH()
 }
