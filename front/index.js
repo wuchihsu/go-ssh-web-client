@@ -8,7 +8,7 @@ terminal.loadAddon(fitAddon);
 terminal.open(document.getElementById('terminal'));
 fitAddon.fit();
 
-const webSocket = new WebSocket("ws://127.0.0.1:8080/web-socket/ssh");
+const webSocket = new WebSocket('ws://' + window.location.host + '/web-socket/ssh');
 
 const sendSize = () => {
   const windowSize = {high: terminal.rows, width: terminal.cols};
@@ -23,12 +23,6 @@ const resizeScreen = () => {
   sendSize();
 }
 window.addEventListener('resize', resizeScreen, false);
-
-// terminal.onResize(event => {
-//   const windowSize = {high: event.rows, width: event.cols};
-//   const blob = new Blob([JSON.stringify(windowSize)], {type : 'application/json'});
-//   webSocket.send(blob);
-// })
 
 const attachAddon = new AttachAddon(webSocket);
 terminal.loadAddon(attachAddon);

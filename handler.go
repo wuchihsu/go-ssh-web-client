@@ -32,15 +32,9 @@ type windowSize struct {
 	Width int `json:"width"`
 }
 
-// TODO: do not bypass origin check
-func checkOrigin(r *http.Request) bool {
-	return true
-}
-
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  maxMessageSize,
 	WriteBufferSize: maxMessageSize,
-	CheckOrigin:     checkOrigin,
 }
 
 type sshClient struct {
