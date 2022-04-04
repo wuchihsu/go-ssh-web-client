@@ -2,7 +2,6 @@
 
 config.toml
 node_modules
-dist
 
 # Binaries for programs and plugins
 *.exe
