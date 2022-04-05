@@ -27,14 +27,14 @@ var terminalModes = ssh.TerminalModes{
 	ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 }
 
-type windowSize struct {
-	High  int `json:"high"`
-	Width int `json:"width"`
-}
-
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  maxMessageSize,
 	WriteBufferSize: maxMessageSize,
+}
+
+type windowSize struct {
+	High  int `json:"high"`
+	Width int `json:"width"`
 }
 
 type sshClient struct {
