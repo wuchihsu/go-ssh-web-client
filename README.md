@@ -1,4 +1,4 @@
-# go-ssh-web-client
+# Go SSH Web Client
 
 A simple SSH web client using Go, WebSocket and Xterm.js.
 
