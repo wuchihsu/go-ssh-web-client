@@ -42,6 +42,7 @@ type sshClient struct {
 	addr     string
 	user     string
 	secret   string
+	keyfile  string
 	client   *ssh.Client
 	sess     *ssh.Session
 	sessIn   io.WriteCloser
@@ -145,11 +146,26 @@ func (c *sshClient) bridgeWSAndSSH() {
 
 	// log.Println("wdSize:", wdSize)
 
+	var auth ssh.AuthMethod
+	if c.secret != "" {
+		auth = ssh.Password(c.secret)
+	} else {
+		key, err := os.ReadFile(c.keyfile)
+		if err != nil {
+			log.Println("bridgeWSAndSSH: os.ReadFile:", err)
+			return
+		}
+		privateKey, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			log.Println("bridgeWSAndSSH: ssh.ParsePrivateKey:", err)
+			return
+		}
+		auth = ssh.PublicKeys(privateKey)
+	}
+
 	config := &ssh.ClientConfig{
 		User: c.user,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(c.secret),
-		},
+		Auth: []ssh.AuthMethod{auth},
 		// InsecureIgnoreHostKey returns a function
 		// that can be used for ClientConfig.HostKeyCallback
 		// to accept any host key.
@@ -212,9 +228,10 @@ func (c *sshClient) bridgeWSAndSSH() {
 }
 
 type sshHandler struct {
-	addr   string
-	user   string
-	secret string
+	addr    string
+	user    string
+	secret  string
+	keyfile string
 }
 
 // webSocket handles WebSocket requests for SSH from the clients.
@@ -230,6 +247,7 @@ func (h *sshHandler) webSocket(w http.ResponseWriter, req *http.Request) {
 		addr:     h.addr,
 		user:     h.user,
 		secret:   h.secret,
+		keyfile:  h.keyfile,
 		closeSig: make(chan struct{}, 1),
 	}
 	go sshCli.bridgeWSAndSSH()
