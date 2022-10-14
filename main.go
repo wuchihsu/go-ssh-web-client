@@ -12,25 +12,28 @@ import (
 )
 
 type config struct {
-	Host     string `toml:"host"`
-	Port     uint   `toml:"port"`
-	User     string `toml:"user"`
-	Password string `toml:"password"`
+	Host         string `toml:"host"`
+	Port         uint   `toml:"port"`
+	User         string `toml:"user"`
+	Password     string `toml:"password"`
+	IdentityFile string `toml:"identity_file"`
 }
 
 func main() {
 	var (
-		host       string
-		port       uint
-		user       string
-		password   string
-		configPath string
+		host         string
+		port         uint
+		user         string
+		password     string
+		identityFile string
+		configPath   string
 	)
 	hostUsage := "the target host (required if no config file)"
 	portUsage := "the port to connect"
 	portDefualt := uint(22)
 	userUsage := "the login user (required if no config file)"
-	passwordUsage := "the login password (required if no config file)"
+	passwordUsage := "the login password"
+	identityFileUsage := "the identity file"
 	configPathUsage := "the path of config file (ignore other args if a config file exists)"
 	configPathDefualt := "./config.toml"
 
@@ -38,6 +41,7 @@ func main() {
 	flag.UintVar(&port, "p", portDefualt, portUsage)
 	flag.StringVar(&user, "u", "", userUsage)
 	flag.StringVar(&password, "s", "", passwordUsage)
+	flag.StringVar(&identityFile, "i", "", identityFileUsage)
 	flag.StringVar(&configPath, "c", configPathDefualt, configPathUsage)
 
 	flag.Parse()
@@ -51,7 +55,7 @@ func main() {
 		if user == "" {
 			log.Fatal("user can not be empty")
 		}
-		if password == "" {
+		if password == "" && identityFile == "" {
 			log.Fatal("password can not be empty")
 		}
 		addr := fmt.Sprintf("%s:%d", host, port)
@@ -60,7 +64,11 @@ func main() {
 		log.Fatal("could not parse config file: ", err)
 	} else {
 		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-		handler = &sshHandler{addr: addr, user: cfg.User, secret: cfg.Password}
+		if password != "" {
+			handler = &sshHandler{addr: addr, user: cfg.User, secret: cfg.Password}
+		} else {
+			handler = &sshHandler{addr: addr, user: cfg.User, keyfile: cfg.IdentityFile}
+		}
 	}
 
 	http.Handle("/", http.FileServer(http.Dir("./front/")))
