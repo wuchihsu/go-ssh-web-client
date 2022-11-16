@@ -200,8 +200,12 @@ func (c *sshClient) bridgeWSAndSSH() {
 	}
 	defer c.sessIn.Close()
 
-	if err := c.sess.RequestPty("xterm", wdSize.High, wdSize.Width, terminalModes); err != nil {
+	if err := c.sess.RequestPty("xterm-256color", wdSize.High, wdSize.Width, terminalModes); err != nil {
 		log.Println("bridgeWSAndSSH: session.RequestPty:", err)
+		return
+	}
+	if err := c.sess.Setenv("COLORTERM", "truecolor"); err != nil {
+		log.Println("bridgeWSAndSSH: session.Setenv:", err)
 		return
 	}
 	if err := c.sess.Shell(); err != nil {
