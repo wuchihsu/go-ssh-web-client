@@ -21,6 +21,8 @@ type config struct {
 
 func main() {
 	var (
+		bind         string
+		listen       uint
 		host         string
 		port         uint
 		user         string
@@ -28,6 +30,10 @@ func main() {
 		identityFile string
 		configPath   string
 	)
+	bindUsage := "the bind address"
+	bindDefault := ""
+	listenUsage := "the listen port"
+	listenDefault := uint(8080)
 	hostUsage := "the target host (required if no config file)"
 	portUsage := "the port to connect"
 	portDefualt := uint(22)
@@ -37,6 +43,8 @@ func main() {
 	configPathUsage := "the path of config file (ignore other args if a config file exists)"
 	configPathDefualt := "./config.toml"
 
+	flag.StringVar(&bind, "b", bindDefault, bindUsage)
+	flag.UintVar(&listen, "l", listenDefault, listenUsage)
 	flag.StringVar(&host, "t", "", hostUsage)
 	flag.UintVar(&port, "p", portDefualt, portUsage)
 	flag.StringVar(&user, "u", "", userUsage)
@@ -73,5 +81,6 @@ func main() {
 
 	http.Handle("/", http.FileServer(http.Dir("./front/")))
 	http.HandleFunc("/web-socket/ssh", handler.webSocket)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	addr := fmt.Sprintf("%s:%d", bind, listen)
+	log.Fatal(http.ListenAndServe(addr, nil))
 }
