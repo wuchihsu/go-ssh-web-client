@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -50,6 +49,11 @@ type sshClient struct {
 	closeSig chan struct{}
 }
 
+type sshMessage struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
+
 func (c *sshClient) getWindowSize() (wdSize *windowSize, err error) {
 	c.conn.SetReadDeadline(time.Now().Add(messageWait))
 	msgType, msg, err := c.conn.ReadMessage()
@@ -61,8 +65,6 @@ func (c *sshClient) getWindowSize() (wdSize *windowSize, err error) {
 		err = fmt.Errorf("conn.ReadMessage: %w", err)
 		return
 	}
-
-	// log.Println("msg:", string(msg))
 
 	wdSize = new(windowSize)
 	if err = json.Unmarshal(msg, wdSize); err != nil {
@@ -120,14 +122,10 @@ func (c *sshClient) wsRead() error {
 			return fmt.Errorf("connReader.Read: %w", err)
 		}
 
-		// log.Println("data:", string(data))
-
 		var wdSize windowSize
 		if err := json.Unmarshal(data[:n], &wdSize); err != nil {
 			return fmt.Errorf("json.Unmarshal: %w", err)
 		}
-
-		// log.Println("wdSize:", wdSize)
 
 		if err := c.sess.WindowChange(wdSize.High, wdSize.Width); err != nil {
 			return fmt.Errorf("sess.WindowChange: %w", err)
@@ -140,27 +138,30 @@ func (c *sshClient) bridgeWSAndSSH() {
 
 	wdSize, err := c.getWindowSize()
 	if err != nil {
-		log.Println("bridgeWSAndSSH: getWindowSize:", err)
+		logError("bridgeWSAndSSH: getWindowSize:", err)
 		return
 	}
-
-	// log.Println("wdSize:", wdSize)
 
 	var auth ssh.AuthMethod
 	if c.secret != "" {
 		auth = ssh.Password(c.secret)
 	} else {
-		key, err := os.ReadFile(c.keyfile)
-		if err != nil {
-			log.Println("bridgeWSAndSSH: os.ReadFile:", err)
-			return
+		if c.keyfile != "" {
+			key, err := os.ReadFile(c.keyfile)
+			if err != nil {
+				logError("bridgeWSAndSSH: os.ReadFile: %s", err)
+				return
+			}
+			privateKey, err := ssh.ParsePrivateKey(key)
+			if err != nil {
+				logError("bridgeWSAndSSH: ssh.ParsePrivateKey:", err)
+				return
+			}
+			auth = ssh.PublicKeys(privateKey)
+		} else {
+			auth = nil
 		}
-		privateKey, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			log.Println("bridgeWSAndSSH: ssh.ParsePrivateKey:", err)
-			return
-		}
-		auth = ssh.PublicKeys(privateKey)
+
 	}
 
 	config := &ssh.ClientConfig{
@@ -174,14 +175,14 @@ func (c *sshClient) bridgeWSAndSSH() {
 	}
 	c.client, err = ssh.Dial("tcp", c.addr, config)
 	if err != nil {
-		log.Println("bridgeWSAndSSH: ssh.Dial:", err)
+		logError("bridgeWSAndSSH: ssh.Dial:", err)
 		return
 	}
 	defer c.client.Close()
 
 	c.sess, err = c.client.NewSession()
 	if err != nil {
-		log.Println("bridgeWSAndSSH: client.NewSession:", err)
+		logError("bridgeWSAndSSH: client.NewSession:", err)
 		return
 	}
 	defer c.sess.Close()
@@ -189,38 +190,40 @@ func (c *sshClient) bridgeWSAndSSH() {
 	c.sess.Stderr = os.Stderr // TODO: check proper Stderr output
 	c.sessOut, err = c.sess.StdoutPipe()
 	if err != nil {
-		log.Println("bridgeWSAndSSH: session.StdoutPipe:", err)
+		logError("bridgeWSAndSSH: session.StdoutPipe:", err)
 		return
 	}
 
 	c.sessIn, err = c.sess.StdinPipe()
 	if err != nil {
-		log.Println("bridgeWSAndSSH: session.StdinPipe:", err)
+		logError("bridgeWSAndSSH: session.StdinPipe:", err)
 		return
 	}
 	defer c.sessIn.Close()
 
 	if err := c.sess.RequestPty("xterm", wdSize.High, wdSize.Width, terminalModes); err != nil {
-		log.Println("bridgeWSAndSSH: session.RequestPty:", err)
+		logError("bridgeWSAndSSH: session.RequestPty:", err)
 		return
 	}
 	if err := c.sess.Shell(); err != nil {
-		log.Println("bridgeWSAndSSH: session.Shell:", err)
+		logError("bridgeWSAndSSH: session.Shell:", err)
 		return
 	}
 
-	log.Println("started a login shell on the remote host")
-	defer log.Println("closed a login shell on the remote host")
+	logInfo("started a login shell on the remote host")
+
+	defer logInfo("closed a login shell on the remote host")
 
 	go func() {
 		if err := c.wsRead(); err != nil {
-			log.Println("bridgeWSAndSSH: wsRead:", err)
+			logError("bridgeWSAndSSH: wsRead:", err)
 		}
 	}()
 
 	go func() {
 		if err := c.wsWrite(); err != nil {
-			log.Println("bridgeWSAndSSH: wsWrite:", err)
+			logError("bridgeWSAndSSH: wsWrite:", err)
+			c.conn.Close()
 		}
 	}()
 
@@ -238,7 +241,7 @@ type sshHandler struct {
 func (h *sshHandler) webSocket(w http.ResponseWriter, req *http.Request) {
 	conn, err := upgrader.Upgrade(w, req, nil)
 	if err != nil {
-		log.Println("upgrader.Upgrade:", err)
+		logError("upgrader.Upgrade:", err)
 		return
 	}
 

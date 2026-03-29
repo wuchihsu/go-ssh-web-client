@@ -54,22 +54,24 @@ func main() {
 
 	flag.Parse()
 
+	logInfo("start ssh web client")
+
 	var cfg config
 	var handler *sshHandler
 	if _, err := toml.DecodeFile(configPath, &cfg); errors.Is(err, os.ErrNotExist) {
 		if host == "" {
-			log.Fatal("host can not be empty")
+			logWarn("host can not be empty")
 		}
 		if user == "" {
-			log.Fatal("user can not be empty")
+			logWarn("user can not be empty")
 		}
 		if password == "" && identityFile == "" {
-			log.Fatal("password can not be empty")
+			logWarn("password can not be empty")
 		}
 		addr := fmt.Sprintf("%s:%d", host, port)
 		handler = &sshHandler{addr: addr, user: user, secret: password}
 	} else if err != nil {
-		log.Fatal("could not parse config file: ", err)
+		logError("could not parse config file", err)
 	} else {
 		addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 		if password != "" {
@@ -81,6 +83,5 @@ func main() {
 
 	http.Handle("/", http.FileServer(http.Dir("./front/")))
 	http.HandleFunc("/web-socket/ssh", handler.webSocket)
-	addr := fmt.Sprintf("%s:%d", bind, listen)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal(http.ListenAndServe(":"+getPort(listen), nil))
 }

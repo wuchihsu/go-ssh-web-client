@@ -4,42 +4,46 @@ A simple SSH web client using Go, WebSocket and Xterm.js.
 
 ## Getting Started
 
-There are two ways to install and run the project, using Go and using Docker.
+After cloning the project, copy [config.toml.sample](config.toml.sample) to `config.toml`. Modify the host, port, user and password attributes to match the target SSH server in `config.toml`.
 
-### Go
+There are two ways to install and run the project, using build script and using Docker.
 
-After cloning the project, go into its `front` folder and install npm packages:
+### 1. Script
+
+Prerequisites:
+- [Go](https://golang.org/doc/install)
+- [Node.js](https://nodejs.org/en/download/)
+- [npm](https://www.npmjs.com/get-npm)
+
+First, execute script to run frontend dev server:
 
 ```bash
-cd go-ssh-web-client/front
-npm install --production
+./scripts/frontend-dev.sh
 ```
 
-Then go back to main folder, add configuration file and modify it:
+Then run the backend program:
 
 ```bash
-cd ..
-cp config.toml.sample config.toml
-vim config.toml
-```
-
-Modify the host, port, user and password attributes to match the target SSH server, then save the file. Finally, run the program:
-
-```bash
-go run .
+./scripts/backend-dev.sh
 ```
 
 Now, the HTTP server is running on port 8080, open http://localhost:8080 to use it (use http at your own risk).
 
-### Docker
+### 2. Docker
 
-First, prepare a configuration file, like [config.toml.sample](config.toml.sample). After preparing `config.toml` in current directory, run the prebuilt image:
+Prerequisites:
+- [Docker](https://docs.docker.com/get-docker/)
+
+In current directory, run the prebuilt image:
 
 ```bash
-docker run --name go-ssh -d \
-    -v `pwd`/config.toml:/root/config.toml \
-    -p 8080:8080 \
-    wuchihsu/go-ssh-web-client
+./scripts/build-docker.sh
+```
+
+Then, run the container:
+
+```bash
+./scripts/docker-dev.sh
 ```
 
 Now, the HTTP server is running on port 8080, open http://localhost:8080 to use it (use http at your own risk).

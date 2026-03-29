@@ -4,7 +4,8 @@
   "description": "Using Go, WebSocket and xterm.js to be a SSH client.",
   "main": "index.js",
   "scripts": {
-    "build": "webpack"
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development"
   },
   "repository": {
     "type": "git",
@@ -21,15 +22,20 @@
   },
   "homepage": "https://github.com/wuchihsu/go-ssh-web-client#readme",
   "dependencies": {
-    "xterm": "^4.17.0",
-    "xterm-addon-attach": "^0.6.0",
-    "xterm-addon-fit": "^0.5.0"
+    "@xterm/addon-attach": "0.12.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
   },
   "devDependencies": {
+    "css-loader": "^7.1.2",
     "eslint": "^8.10.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.25.4",
+    "style-loader": "^4.0.0",
     "webpack": "^5.69.1",
     "webpack-cli": "^4.9.2"
+  },
+  "engines": {
+    "node": ">=22 <=24"
   }
 }
